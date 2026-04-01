@@ -1,0 +1,497 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 <!DOCTYPE html>\
+<html lang="en">\
+<head>\
+    <meta charset="UTF-8">\
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">\
+    <title>Toronto Fishing Forecast</title>\
+    <!-- Tailwind CSS -->\
+    <script src="https://cdn.tailwindcss.com"></script>\
+    \
+    <!-- Import Map: Explicitly tells browser where to find React & Icons -->\
+    <script type="importmap">\
+    \{\
+      "imports": \{\
+        "react": "https://esm.sh/react@18.2.0",\
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",\
+        "lucide-react": "https://esm.sh/lucide-react@0.303.0"\
+      \}\
+    \}\
+    </script>\
+\
+    <!-- Babel Standalone: Compiles the React code in the browser -->\
+    <!-- Using a specific version (7.23.6) to ensure stability -->\
+    <script src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>\
+\
+    <style>\
+        /* Animation Keyframes */\
+        @keyframes drift \{ 0% \{ transform: translateX(-10px); opacity: 0.8; \} 50% \{ transform: translateX(10px); opacity: 1; \} 100% \{ transform: translateX(-10px); opacity: 0.8; \} \}\
+        @keyframes fall \{ 0% \{ transform: translateY(-5px); opacity: 0; \} 20% \{ opacity: 1; \} 80% \{ opacity: 1; \} 100% \{ transform: translateY(20px); opacity: 0; \} \}\
+        @keyframes float \{ 0%, 100% \{ transform: translateY(0); \} 50% \{ transform: translateY(-5px); \} \}\
+        @keyframes spin-slow \{ from \{ transform: rotate(0deg); \} to \{ transform: rotate(360deg); \} \}\
+        \
+        .animate-drift \{ animation: drift 6s infinite ease-in-out; \}\
+        .animate-fall \{ animation: fall 1.5s infinite linear; \}\
+        .animate-float \{ animation: float 4s infinite ease-in-out; \}\
+        .animate-spin-slow \{ animation: spin-slow 12s infinite linear; \}\
+        \
+        .delay-100 \{ animation-delay: 100ms; \}\
+        .delay-200 \{ animation-delay: 200ms; \}\
+        .delay-300 \{ animation-delay: 300ms; \}\
+        .delay-500 \{ animation-delay: 500ms; \}\
+        .delay-700 \{ animation-delay: 700ms; \}\
+    </style>\
+</head>\
+<body class="bg-slate-950 text-slate-100">\
+    <div id="root"></div>\
+\
+    <!-- Main Application Script -->\
+    <script type="text/babel" data-type="module">\
+        import React, \{ useState, useEffect, useMemo \} from 'react';\
+        import \{ createRoot \} from 'react-dom/client';\
+        import \{ \
+            Cloud, Sun, Moon, Wind, Thermometer, Navigation, Droplets, \
+            TrendingDown, TrendingUp, Minus, Fish, Calendar, MapPin, \
+            Info, RefreshCw, AlertCircle, Sparkles, Loader2, Bot, \
+            Target, Snowflake, CloudRain \
+        \} from 'lucide-react';\
+\
+        // --- Configuration ---\
+        const PRESSURE_OFFSET = 9.0; \
+\
+        // Species Preferences\
+        const SPECIES_PREF = \{\
+            General: \{ minTemp: 0, maxTemp: 35, windTol: 40, label: "General Fishing" \},\
+            Bass:    \{ minTemp: 15, maxTemp: 30, windTol: 25, label: "Bass (Small/Large)" \},\
+            Pike:    \{ minTemp: 10, maxTemp: 25, windTol: 20, label: "Northern Pike" \},\
+            Walleye: \{ minTemp: 5, maxTemp: 24, windTol: 20, label: "Walleye / Pickerel" \},\
+            Trout:   \{ minTemp: 4, maxTemp: 20, windTol: 15, label: "Trout (Rainbow/Brown)" \},\
+            Salmon:  \{ minTemp: 4, maxTemp: 18, windTol: 30, label: "Salmon (Chinook/Coho)" \}\
+        \};\
+\
+        // --- Logic Functions ---\
+        const calculateMoonPhase = (date) => \{\
+            const knownNewMoon = new Date('2023-01-21T20:53:00'); \
+            const daysSince = (date.getTime() - knownNewMoon.getTime()) / (1000 * 60 * 60 * 24);\
+            const cycle = 29.53058867;\
+            const phase = (daysSince % cycle) / cycle;\
+            return phase;\
+        \};\
+\
+        const getWeatherIcon = (code, isNight = false, darkMode = true) => \{\
+            const cloudColor = darkMode ? "text-slate-400" : "text-gray-400";\
+            const fogColor = darkMode ? "text-slate-500" : "text-gray-500";\
+\
+            if (code === 0) return isNight ? <Moon className="w-6 h-6 text-yellow-300" /> : <Sun className="w-6 h-6 text-yellow-500" />;\
+            if (code >= 1 && code <= 3) return <Cloud className=\{`w-6 h-6 $\{cloudColor\}`\} />;\
+            if (code >= 45 && code <= 48) return <Cloud className=\{`w-6 h-6 $\{fogColor\}`\} />;\
+            if (code >= 51 && code <= 67) return <Droplets className="w-6 h-6 text-blue-400" />;\
+            if (code >= 71 && code <= 77) return <Thermometer className="w-6 h-6 text-blue-200" />;\
+            if (code >= 80 && code <= 82) return <Droplets className="w-6 h-6 text-blue-600" />;\
+            if (code >= 95) return <Wind className="w-6 h-6 text-purple-500" />;\
+            return <Sun className="w-6 h-6 text-yellow-500" />;\
+        \};\
+\
+        const getWeatherDescription = (code) => \{\
+            if (code === 0) return "Clear Sky";\
+            if (code === 1) return "Mainly Clear";\
+            if (code === 2) return "Partly Cloudy";\
+            if (code === 3) return "Overcast";\
+            if (code >= 45 && code <= 48) return "Fog";\
+            if (code >= 51 && code <= 55) return "Drizzle";\
+            if (code >= 61 && code <= 65) return "Rain";\
+            if (code >= 71 && code <= 77) return "Snow";\
+            if (code >= 80 && code <= 82) return "Showers";\
+            if (code >= 95) return "Thunderstorm";\
+            return "Unknown";\
+        \};\
+\
+        const getMoonPhaseData = (phase) => \{\
+            if (phase > 0.95 || phase < 0.05) return \{ name: "New Moon", icon: "\uc0\u55356 \u57105 " \};\
+            if (phase >= 0.05 && phase < 0.20) return \{ name: "Waxing Crescent", icon: "\uc0\u55356 \u57106 " \};\
+            if (phase >= 0.20 && phase < 0.30) return \{ name: "First Quarter", icon: "\uc0\u55356 \u57107 " \};\
+            if (phase >= 0.30 && phase < 0.45) return \{ name: "Waxing Gibbous", icon: "\uc0\u55356 \u57108 " \};\
+            if (phase >= 0.45 && phase <= 0.55) return \{ name: "Full Moon", icon: "\uc0\u55356 \u57109 " \};\
+            if (phase > 0.55 && phase < 0.70) return \{ name: "Waning Gibbous", icon: "\uc0\u55356 \u57110 " \};\
+            if (phase >= 0.70 && phase < 0.80) return \{ name: "Last Quarter", icon: "\uc0\u55356 \u57111 " \};\
+            if (phase >= 0.80 && phase <= 0.95) return \{ name: "Waning Crescent", icon: "\uc0\u55356 \u57112 " \};\
+            return \{ name: "Unknown", icon: "\uc0\u55356 \u57105 " \};\
+        \};\
+\
+        const getPressureTrend = (hourly, currentTimeStr) => \{\
+            if (!hourly || !hourly.surface_pressure || hourly.surface_pressure.length < 4) \{\
+                return \{ trend: "falling", val: -1.2 \}; \
+            \}\
+            const currentIndex = hourly.time.findIndex(t => t >= currentTimeStr);\
+            const idx = currentIndex === -1 ? 0 : currentIndex;\
+            if (idx < 3) return \{ trend: "stable", val: 0 \};\
+            const currentP = hourly.surface_pressure[idx];\
+            const prevP = hourly.surface_pressure[idx - 3]; \
+            const diff = currentP - prevP;\
+            if (diff > 0.5) return \{ trend: "rising", val: diff \};\
+            if (diff < -0.5) return \{ trend: "falling", val: diff \};\
+            return \{ trend: "stable", val: diff \};\
+        \};\
+\
+        const calculateFishingScore = (pressure, pressureChange, windSpeed, moonPhase, temp, species) => \{\
+            let score = 0; \
+            let reasons = [];\
+            const pref = SPECIES_PREF[species];\
+\
+            if (temp >= pref.minTemp && temp <= pref.maxTemp) \{\
+                score += 10;\
+            \} else \{\
+                reasons.push(`Temp outside range ($\{pref.minTemp\}-$\{pref.maxTemp\}\'b0C)`);\
+            \}\
+\
+            if (pressureChange <= -2.0) \{\
+                score += 30; reasons.push("Plummeting barometer: Feeding frenzy!");\
+            \} else if (pressureChange <= -0.5) \{\
+                score += 20; reasons.push("Steady pressure drop: Active fish");\
+            \} else if (pressureChange >= 2.0) \{\
+                score -= 20; reasons.push("Rapid pressure spike: Lockjaw likely");\
+            \} else if (pressureChange >= 0.5) \{\
+                reasons.push("Rising barometer: Fish sluggish");\
+            \} else \{\
+                if (pressure >= 1008 && pressure <= 1018) \{\
+                    score += 15; reasons.push("Optimal stable pressure");\
+                \} else if (pressure < 1000) \{\
+                    score += 10; reasons.push("Low pressure system active");\
+                \} else \{\
+                    reasons.push("High pressure: Fish deep/inactive");\
+                \}\
+            \}\
+\
+            const distFromNew = Math.min(moonPhase, 1 - moonPhase);\
+            const distFromFull = Math.abs(moonPhase - 0.5);\
+            const proximityToPeak = Math.min(distFromNew, distFromFull);\
+            \
+            if (proximityToPeak < 0.05) \{ \
+                score += 40; reasons.push("Major Solunar Peak (New/Full Moon)");\
+            \} else if (proximityToPeak < 0.15) \{ \
+                score += 25; reasons.push("Strong lunar influence");\
+            \} else \{\
+                const distFromQuarter = Math.abs((moonPhase % 0.5) - 0.25);\
+                if (distFromQuarter < 0.05) \{\
+                    score += 15; reasons.push("Minor Solunar Peak (Quarter Moon)");\
+                \} else \{\
+                    reasons.push("Weak lunar phase");\
+                \}\
+            \}\
+\
+            if (windSpeed > 40) \{\
+                score -= 30; reasons.push("DANGEROUS WINDS");\
+            \} else if (windSpeed > pref.windTol) \{\
+                reasons.push(`Too windy for $\{species\}`);\
+            \} else \{\
+                if (windSpeed > 15 && (species === 'Walleye' || species === 'Pike')) \{\
+                    score += 20; reasons.push("Perfect 'Walleye Chop'");\
+                \} else if (windSpeed < 10) \{\
+                    score += 20; reasons.push("Ideal calm conditions");\
+                \} else \{\
+                    score += 10; \
+                \}\
+            \}\
+            return \{ score: Math.min(Math.max(score, 0), 100), reasons \};\
+        \};\
+\
+        // Fallback Data\
+        const MOCK_DATA = (() => \{\
+            const now = new Date();\
+            const month = now.getMonth();\
+            const isWinter = month >= 11 || month <= 2;\
+            const baseTemp = isWinter ? -4 : 22;\
+            const weatherCodes = isWinter ? [71, 3, 73, 1, 3, 71, 3, 1] : [3, 1, 80, 0, 2, 3, 1, 0];\
+            \
+            return \{\
+                current: \{ temperature_2m: baseTemp, surface_pressure: 1000.2, wind_speed_10m: 15, wind_direction_10m: 180, weather_code: weatherCodes[0], time: now.toISOString() \},\
+                daily: \{\
+                    time: Array.from(\{ length: 8 \}, (_, i) => \{\
+                        const d = new Date(); d.setDate(d.getDate() + i);\
+                        const year = d.getFullYear();\
+                        const month = String(d.getMonth() + 1).padStart(2, '0');\
+                        const day = String(d.getDate()).padStart(2, '0');\
+                        return `$\{year\}-$\{month\}-$\{day\}`;\
+                    \}),\
+                    weather_code: weatherCodes,\
+                    temperature_2m_max: weatherCodes.map(() => baseTemp + 2), temperature_2m_min: weatherCodes.map(() => baseTemp - 5),\
+                    sunrise: [], sunset: [], precipitation_probability_max: [40, 20, 60, 10, 30, 50, 25, 10], wind_speed_10m_max: [18, 22, 15, 12, 25, 20, 15, 10]\
+                \},\
+                hourly: \{ time: [now.toISOString()], surface_pressure: [1000.5, 1000.2, 999.8, 999.2], temperature_2m: [], weather_code: [] \}\
+            \};\
+        \})();\
+\
+        // --- Sub Components ---\
+\
+        const WeatherBanner = (\{ code, darkMode \}) => \{\
+            const isClear = code === 0 || code === 1;\
+            const isCloudy = code >= 2 && code <= 48;\
+            const isRain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82);\
+            const isSnow = (code >= 71 && code <= 77) || (code >= 85 && code <= 86);\
+            const isThunder = code >= 95;\
+\
+            return (\
+                <div className=\{`relative w-full h-32 mb-6 rounded-3xl overflow-hidden shadow-inner flex items-center justify-center transition-colors $\{darkMode ? 'bg-slate-900' : 'bg-blue-50'\}`\}>\
+                    <div className="absolute inset-0 opacity-10 pointer-events-none">\
+                        <div className=\{`absolute top-0 left-0 w-full h-full bg-gradient-to-br $\{darkMode ? 'from-indigo-900 to-slate-900' : 'from-blue-100 to-white'\}`\}></div>\
+                    </div>\
+                    \{isClear && (\
+                        <div className="absolute flex flex-col items-center animate-float">\
+                            \{darkMode ? <Moon className="w-16 h-16 text-yellow-100 drop-shadow-lg" /> : <Sun className="w-16 h-16 text-yellow-500 drop-shadow-lg animate-spin-slow" />\}\
+                            <span className=\{`mt-2 text-sm font-medium $\{darkMode ? 'text-slate-400' : 'text-slate-600'\}`\}>Clear Conditions</span>\
+                        </div>\
+                    )\}\
+                    \{isCloudy && (\
+                        <div className="relative w-full h-full flex items-center justify-center">\
+                            <Cloud className=\{`absolute w-12 h-12 top-4 left-1/4 animate-drift $\{darkMode ? 'text-slate-600' : 'text-gray-300'\}`\} />\
+                            <Cloud className=\{`absolute w-16 h-16 top-8 right-1/4 delay-300 animate-drift $\{darkMode ? 'text-slate-500' : 'text-gray-400'\}`\} />\
+                            <div className="z-10 flex flex-col items-center">\
+                                <Cloud className=\{`w-14 h-14 $\{darkMode ? 'text-slate-300' : 'text-gray-500'\}`\} />\
+                                <span className=\{`mt-1 text-sm font-medium $\{darkMode ? 'text-slate-400' : 'text-slate-600'\}`\}>Overcast</span>\
+                            </div>\
+                        </div>\
+                    )\}\
+                    \{(isRain || isThunder) && (\
+                        <div className="relative w-full h-full flex items-center justify-center overflow-hidden">\
+                            <div className="absolute inset-0 flex justify-around opacity-30 pointer-events-none">\
+                                <div className="w-0.5 h-4 bg-blue-400 animate-fall delay-100"></div><div className="w-0.5 h-4 bg-blue-400 animate-fall delay-300"></div>\
+                            </div>\
+                            <div className="z-10 flex flex-col items-center">\
+                                \{isThunder ? <CloudRain className="w-14 h-14 text-purple-400" /> : <CloudRain className="w-14 h-14 text-blue-500" />\}\
+                                <span className=\{`mt-1 text-sm font-medium $\{darkMode ? 'text-slate-400' : 'text-slate-600'\}`\}>\{isThunder ? "Stormy" : "Rainy"\}</span>\
+                            </div>\
+                        </div>\
+                    )\}\
+                    \{isSnow && (\
+                        <div className="relative w-full h-full flex items-center justify-center overflow-hidden">\
+                            <div className="absolute inset-0 flex justify-around opacity-40 pointer-events-none">\
+                                <div className="w-1.5 h-1.5 bg-white rounded-full animate-fall delay-100"></div><div className="w-1.5 h-1.5 bg-white rounded-full animate-fall delay-300"></div>\
+                            </div>\
+                            <div className="z-10 flex flex-col items-center">\
+                                <Snowflake className="w-14 h-14 text-blue-200" />\
+                                <span className=\{`mt-1 text-sm font-medium $\{darkMode ? 'text-slate-400' : 'text-slate-600'\}`\}>Snowing</span>\
+                            </div>\
+                        </div>\
+                    )\}\
+                </div>\
+            );\
+        \};\
+\
+        const Gauge = (\{ score, darkMode \}) => \{\
+            const r = 70, arc = Math.PI * r, off = arc - (arc * score) / 100;\
+            let color = "text-red-500", stroke = "stroke-red-500", txt = "Poor";\
+            if (score > 40) \{ color = "text-yellow-500"; stroke = "stroke-yellow-400"; txt = "Fair"; \}\
+            if (score > 60) \{ color = "text-blue-500"; stroke = "stroke-blue-500"; txt = "Good"; \}\
+            if (score > 80) \{ color = "text-green-500"; stroke = "stroke-green-500"; txt = "Excellent"; \}\
+\
+            return (\
+                <div className="relative flex flex-col items-center justify-center py-6">\
+                    <div className="relative w-56 h-28">\
+                        <svg className="w-full h-full" viewBox="0 0 200 100">\
+                            <path d="M 30 85 A 70 70 0 0 1 170 85" fill="none" strokeWidth="18" strokeLinecap="round" className=\{darkMode ? "stroke-slate-700" : "stroke-gray-200"\} />\
+                            <path d="M 30 85 A 70 70 0 0 1 170 85" fill="none" strokeWidth="18" strokeLinecap="round" className=\{`transition-all duration-1000 ease-out $\{stroke\}`\} strokeDasharray=\{arc\} strokeDashoffset=\{off\} />\
+                        </svg>\
+                        <div className="absolute inset-0 flex items-end justify-center pb-2">\
+                            <span className=\{`text-5xl font-bold $\{darkMode ? 'text-white' : 'text-gray-800'\}`\}>\{score\}</span>\
+                        </div>\
+                    </div>\
+                    <div className=\{`text-lg font-semibold mt-1 $\{color\}`\}>\{txt\} Conditions</div>\
+                </div>\
+            );\
+        \};\
+\
+        const ForecastCard = (\{ day, code, max, min, moon, pressure, wind, species, trendOverride, darkMode \}) => \{\
+            const date = new Date(day + 'T12:00:00');\
+            const dayName = date.toLocaleDateString('en-US', \{ weekday: 'short' \});\
+            const dayNum = date.toLocaleDateString('en-US', \{ day: 'numeric', month: 'short' \});\
+            const moonData = getMoonPhaseData(moon);\
+            const pressureTrendVal = trendOverride !== undefined ? trendOverride : 0;\
+            const \{ score \} = calculateFishingScore(pressure, pressureTrendVal, wind, moon, (max + min) / 2, species);\
+\
+            let barColor = "bg-red-400";\
+            if (score > 40) barColor = "bg-yellow-400";\
+            if (score > 60) barColor = "bg-blue-400";\
+            if (score > 80) barColor = "bg-green-400";\
+\
+            const cardBg = darkMode ? "bg-slate-800" : "bg-white";\
+            const cardBorder = darkMode ? "border-slate-700 hover:border-slate-600" : "border-slate-100 hover:shadow-md";\
+            const textColor = darkMode ? "text-slate-200" : "text-slate-700";\
+            const subTextColor = darkMode ? "text-slate-500" : "text-slate-400";\
+            const iconBg = darkMode ? "bg-slate-700" : "bg-slate-50";\
+\
+            return (\
+                <div className=\{`flex items-center justify-between p-4 rounded-xl shadow-sm border transition-all $\{cardBg\} $\{cardBorder\}`\}>\
+                    <div className="flex items-center gap-4 w-1/3">\
+                        <div className="flex flex-col text-center w-12"><span className=\{`font-bold $\{textColor\}`\}>\{dayName\}</span><span className=\{`text-xs $\{subTextColor\}`\}>\{dayNum\}</span></div>\
+                        <div className=\{`p-2 rounded-lg $\{iconBg\}`\}>\{getWeatherIcon(code, true, darkMode)\}</div>\
+                    </div>\
+                    <div className="flex flex-col w-1/3 text-center">\
+                        <div className="flex justify-center gap-2 text-sm font-medium"><span className=\{textColor\}>\{Math.round(max)\}\'b0</span><span className=\{subTextColor\}>\{Math.round(min)\}\'b0</span></div>\
+                        <div className=\{`flex items-center justify-center gap-1 text-xs $\{subTextColor\} mt-1`\}><span className="text-lg">\{moonData.icon\}</span></div>\
+                    </div>\
+                    <div className="w-1/3 flex flex-col items-end">\
+                        <div className="flex items-center gap-2 w-full justify-end">\
+                            <div className=\{`w-full max-w-[80px] h-2 rounded-full overflow-hidden $\{darkMode ? 'bg-slate-700' : 'bg-gray-100'\}`\}><div className=\{`h-full $\{barColor\}`\} style=\{\{ width: `$\{score\}%` \}\}></div></div>\
+                            <span className=\{`text-sm font-bold $\{darkMode ? 'text-slate-300' : 'text-slate-700'\}`\}>\{score\}</span>\
+                        </div>\
+                    </div>\
+                </div>\
+            );\
+        \};\
+\
+        // Main App Component\
+        function App() \{\
+            const [data, setData] = useState(null);\
+            const [loading, setLoading] = useState(true);\
+            const [error, setError] = useState(null);\
+            const [usingMock, setUsingMock] = useState(false);\
+            const [targetSpecies, setTargetSpecies] = useState('General');\
+            const [darkMode, setDarkMode] = useState(true);\
+            \
+            const [aiAdvice, setAiAdvice] = useState("");\
+            const [isAiLoading, setIsAiLoading] = useState(false);\
+            const [aiError, setAiError] = useState(null);\
+\
+            const generateAiStrategy = async () => \{\
+                if (!currentCalculations || !data) return;\
+                setIsAiLoading(true); setAiError(null); setAiAdvice("");\
+                const \{ current \} = data;\
+                const \{ pressureTrend, moonData, displayPressure \} = currentCalculations;\
+                const prompt = `You are a professional fishing guide in Toronto, Ontario. Target Species: $\{targetSpecies.toUpperCase()\}. Analyze: Season $\{new Date().toLocaleDateString('en-US', \{ month: 'long' \})\}, Time $\{new Date().toLocaleTimeString()\}, Temp $\{current.temperature_2m\}\'b0C, Weather $\{getWeatherDescription(current.weather_code)\}, Wind $\{current.wind_speed_10m\} km/h (Dir $\{current.wind_direction_10m\}\'b0), Pressure $\{displayPressure.toFixed(1)\} hPa ($\{pressureTrend\}), Moon $\{moonData.name\}. Provide concise strategy (max 150 words): 1. Location (depth/structure), 2. Lures (2 specific recs), 3. Activity prediction.`;\
+\
+                try \{\
+                    const apiKey = ""; // API Key\
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=$\{apiKey\}`, \{ method: 'POST', headers: \{ 'Content-Type': 'application/json' \}, body: JSON.stringify(\{ contents: [\{ parts: [\{ text: prompt \}] \}] \}) \});\
+                    if (!response.ok) throw new Error('AI Service unavailable');\
+                    const result = await response.json();\
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;\
+                    if (text) setAiAdvice(text); else throw new Error('No advice generated');\
+                \} catch (err) \{ setAiError("Could not generate strategy. Try again."); \} finally \{ setIsAiLoading(false); \}\
+            \};\
+\
+            const fetchWeather = async () => \{\
+                setLoading(true); setError(null);\
+                try \{\
+                    const p = new URLSearchParams(\{ latitude: "43.6532", longitude: "-79.3832", current: "temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code", hourly: "surface_pressure,temperature_2m,weather_code,wind_speed_10m", daily: "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max,wind_speed_10m_max", timezone: "America/Toronto", models: "gfs_seamless", forecast_days: "8" \});\
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?$\{p\}`);\
+                    if(!res.ok) throw new Error(`API Error: $\{res.status\}`);\
+                    setData(await res.json());\
+                    setUsingMock(false);\
+                \} catch(e) \{ console.error(e); setError(e.message || "Failed to load"); setData(MOCK_DATA); setUsingMock(true); \} finally \{ setLoading(false); \}\
+            \};\
+\
+            useEffect(() => \{ fetchWeather(); \}, []);\
+\
+            const currentCalculations = useMemo(() => \{\
+                if (!data) return null;\
+                const currentPressure = data.current.surface_pressure + PRESSURE_OFFSET;\
+                const trend = getPressureTrend(data.hourly, data.current.time);\
+                const moon = calculateMoonPhase(new Date());\
+                const \{ score, reasons \} = calculateFishingScore(currentPressure, trend.val, data.current.wind_speed_10m, moon, data.current.temperature_2m, targetSpecies);\
+                const moonData = getMoonPhaseData(moon);\
+                return \{ pressureTrend: trend.trend, pressureChangeVal: trend.val, score, reasons, moonData, displayPressure: currentPressure \};\
+            \}, [data, targetSpecies]);\
+\
+            if (loading) return <div className=\{`flex items-center justify-center min-h-screen $\{darkMode ? 'bg-slate-950 text-slate-400' : 'bg-slate-50 text-slate-500'\}`\}><div className="flex flex-col items-center animate-pulse"><Fish className="w-12 h-12 mb-4 text-blue-500" /><p>Connecting to GFS Weather Satellite...</p></div></div>;\
+            if (!currentCalculations || !data) return null;\
+\
+            const \{ current \} = data;\
+            const \{ pressureTrend, pressureChangeVal, score, reasons, moonData, displayPressure \} = currentCalculations;\
+            const todayDateStr = new Date().toLocaleDateString('en-CA', \{ timeZone: 'America/Toronto' \});\
+            let startIndex = data.daily.time.findIndex(t => t >= todayDateStr);\
+            if (startIndex === -1) startIndex = 0; \
+            const visibleDays = data.daily.time.slice(startIndex, startIndex + 6);\
+\
+            const appBg = darkMode ? "bg-slate-950" : "bg-slate-50";\
+            const appText = darkMode ? "text-slate-100" : "text-slate-800";\
+            const headerBg = darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200";\
+            const cardBg = darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200 shadow-sm";\
+            const subText = darkMode ? "text-slate-500" : "text-slate-400";\
+            const headingText = darkMode ? "text-slate-500" : "text-slate-400";\
+            const tagBg = darkMode ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200";\
+\
+            return (\
+                <div className=\{`min-h-screen font-sans pb-12 transition-colors duration-300 $\{appBg\} $\{appText\}`\}>\
+                    <header className=\{`border-b sticky top-0 z-10 transition-colors duration-300 $\{headerBg\}`\}>\
+                        <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">\
+                            <div className="flex items-center gap-2">\
+                                <div className="bg-blue-600 p-2 rounded-lg"><Fish className="w-5 h-5 text-white" /></div>\
+                                <div><h1 className=\{`font-bold text-lg leading-tight $\{darkMode ? 'text-white' : 'text-slate-800'\}`\}>Cast & Catch</h1><div className=\{`flex items-center gap-1 text-xs $\{subText\}`\}><MapPin className="w-3 h-3" /><span>Toronto, ON</span></div></div>\
+                            </div>\
+                            <div className="flex items-center gap-3">\
+                                <button onClick=\{() => setDarkMode(!darkMode)\} className=\{`p-2 rounded-full transition-colors $\{darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'\}`\}>\{darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />\}</button>\
+                                <div className=\{`text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2 $\{usingMock ? 'bg-orange-900/30 text-orange-400 border border-orange-800' : (darkMode ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-green-50 text-green-700 border border-green-200')\}`\}>\
+                                    \{usingMock ? <><AlertCircle className="w-3 h-3" /><span>Demo Mode</span></> : <><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span><span>GFS Live</span></>\}\
+                                </div>\
+                            </div>\
+                        </div>\
+                    </header>\
+\
+                    \{error && <div className="max-w-2xl mx-auto px-4 mt-4"><div className=\{`px-4 py-3 rounded-xl flex items-center gap-3 text-sm border $\{darkMode ? 'bg-orange-950/50 border-orange-900 text-orange-300' : 'bg-orange-50 border-orange-200 text-orange-800'\}`\}><AlertCircle className="w-5 h-5 flex-shrink-0" /><p>Live data unavailable (\{error\}). Showing cached demo data.</p><button onClick=\{fetchWeather\} className="ml-auto font-bold underline hover:opacity-80">Retry</button></div></div>\}\
+\
+                    <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">\
+                        <WeatherBanner code=\{current.weather_code\} darkMode=\{darkMode\} />\
+                        <section className=\{`rounded-3xl p-6 border transition-colors $\{cardBg\}`\}>\
+                            <div className="flex flex-col items-center mb-6">\
+                                <h2 className=\{`text-xs font-bold uppercase tracking-wider mb-3 $\{headingText\}`\}>Target Species</h2>\
+                                <div className="relative">\
+                                    <div className=\{`flex items-center gap-2 px-4 py-2 rounded-full border cursor-pointer group transition-colors $\{darkMode ? 'bg-slate-800 border-slate-700 hover:border-blue-500' : 'bg-slate-100 border-slate-200 hover:border-blue-400'\}`\}>\
+                                        <Target className="w-4 h-4 text-blue-500" />\
+                                        <select value=\{targetSpecies\} onChange=\{(e) => \{ setTargetSpecies(e.target.value); setAiAdvice(""); \}\} className=\{`bg-transparent text-sm font-bold outline-none appearance-none pr-6 cursor-pointer $\{darkMode ? 'text-slate-200' : 'text-slate-700'\}`\} style=\{\{ backgroundImage: 'none' \}\}>\
+                                            \{Object.keys(SPECIES_PREF).map((s) => <option key=\{s\} value=\{s\} className=\{darkMode ? "bg-slate-800" : "bg-white"\}>\{SPECIES_PREF[s].label\}</option>)\}\
+                                        </select>\
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"><Minus className=\{`w-3 h-3 rotate-45 $\{subText\}`\} /></div>\
+                                    </div>\
+                                </div>\
+                            </div>\
+                            <Gauge score=\{score\} darkMode=\{darkMode\} />\
+                            <div className="mt-6 flex flex-wrap gap-2 justify-center">\{reasons.map((reason, idx) => <span key=\{idx\} className=\{`px-3 py-1 text-xs rounded-full font-medium border $\{tagBg\}`\}>\{reason\}</span>)\}</div>\
+                            <div className=\{`mt-6 border-t pt-4 $\{darkMode ? 'border-slate-800' : 'border-slate-100'\}`\}>\
+                                \{!aiAdvice && !isAiLoading && <button onClick=\{generateAiStrategy\} className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-700 text-white rounded-xl font-bold shadow-lg hover:shadow-indigo-900/50 active:scale-95 transition-all flex items-center justify-center gap-2"><Sparkles className="w-5 h-5" /> Get \{targetSpecies\} Strategy</button>\}\
+                                \{isAiLoading && <div className=\{`w-full py-4 rounded-xl border flex flex-col items-center justify-center gap-2 animate-pulse $\{darkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-400'\}`\}><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /><span className="text-sm font-medium">Analyzing patterns...</span></div>\}\
+                                \{aiAdvice && <div className=\{`w-full rounded-xl border p-4 text-left relative overflow-hidden $\{darkMode ? 'bg-indigo-950/30 border-indigo-900/50' : 'bg-indigo-50 border-indigo-100'\}`\}><div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-600" /><div className=\{`flex items-center gap-2 mb-2 font-bold text-sm $\{darkMode ? 'text-indigo-300' : 'text-indigo-800'\}`\}><Bot className="w-4 h-4" /><span>Gemini Guide (\{targetSpecies\})</span></div><div className=\{`text-sm leading-relaxed whitespace-pre-wrap $\{darkMode ? 'text-slate-300' : 'text-slate-700'\}`\}>\{aiAdvice\}</div><button onClick=\{generateAiStrategy\} className=\{`mt-3 text-xs font-semibold flex items-center gap-1 $\{darkMode ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-800'\}`\}><RefreshCw className="w-3 h-3" /> Refresh Advice</button></div>\}\
+                                \{aiError && <div className="mt-2 text-center text-xs text-red-400 font-medium">\{aiError\}</div>\}\
+                            </div>\
+                        </section>\
+\
+                        <section className="grid grid-cols-2 gap-4">\
+                            <div className=\{`p-4 rounded-2xl border shadow-sm flex flex-col justify-between h-32 $\{cardBg\}`\}><div className="flex items-start justify-between"><span className=\{`text-xs font-bold uppercase $\{headingText\}`\}>Barometer (MSL)</span>\{pressureTrend === 'falling' ? <TrendingDown className="w-5 h-5 text-green-500" /> : pressureTrend === 'rising' ? <TrendingUp className="w-5 h-5 text-red-500" /> : <Minus className=\{`w-5 h-5 $\{subText\}`\} />\}</div><div><div className=\{`text-2xl font-bold $\{darkMode ? 'text-slate-100' : 'text-slate-800'\}`\}>\{displayPressure.toFixed(1)\} <span className=\{`text-sm font-normal $\{subText\}`\}>hPa</span></div><p className=\{`text-xs mt-1 $\{subText\}`\}>\{pressureTrend === 'falling' ? 'Dropping' : pressureTrend === 'rising' ? 'Rising' : 'Stable'\}</p></div></div>\
+                            <div className=\{`p-4 rounded-2xl border shadow-sm flex flex-col justify-between h-32 $\{cardBg\}`\}><div className="flex items-start justify-between"><span className=\{`text-xs font-bold uppercase $\{headingText\}`\}>Moon Phase</span><span className="text-lg">\{moonData.icon\}</span></div><div><div className=\{`text-lg font-bold leading-tight $\{darkMode ? 'text-slate-100' : 'text-slate-800'\}`\}>\{moonData.name\}</div><p className=\{`text-xs mt-1 $\{subText\}`\}>Phase: \{calculateMoonPhase(new Date()).toFixed(2)\}</p></div></div>\
+                            <div className=\{`p-4 rounded-2xl border shadow-sm flex flex-col justify-between h-32 $\{cardBg\}`\}><div className="flex items-start justify-between"><span className=\{`text-xs font-bold uppercase $\{headingText\}`\}>Wind</span><Navigation className="w-5 h-5 text-blue-500" style=\{\{ transform: `rotate($\{current.wind_direction_10m\}deg)` \}\} /></div><div><div className=\{`text-2xl font-bold $\{darkMode ? 'text-slate-100' : 'text-slate-800'\}`\}>\{current.wind_speed_10m\} <span className=\{`text-sm font-normal $\{subText\}`\}>km/h</span></div><p className=\{`text-xs mt-1 $\{subText\}`\}>Dir: \{current.wind_direction_10m\}\'b0</p></div></div>\
+                            <div className=\{`p-4 rounded-2xl border shadow-sm flex flex-col justify-between h-32 $\{cardBg\}`\}><div className="flex items-start justify-between"><span className=\{`text-xs font-bold uppercase $\{headingText\}`\}>Air Temp</span>\{getWeatherIcon(current.weather_code, true, darkMode)\}</div><div><div className=\{`text-2xl font-bold $\{darkMode ? 'text-slate-100' : 'text-slate-800'\}`\}>\{Math.round(current.temperature_2m)\}\'b0</div><p className=\{`text-xs mt-1 capitalize $\{subText\}`\}>\{getWeatherDescription(current.weather_code)\}</p></div></div>\
+                        </section>\
+\
+                        <section>\
+                            <div className="flex items-center gap-2 mb-4 px-2"><Calendar className=\{`w-5 h-5 $\{subText\}`\} /><h3 className=\{`font-bold $\{darkMode ? 'text-slate-300' : 'text-slate-800'\}`\}>6-Day Outlook (\{targetSpecies\})</h3></div>\
+                            <div className="space-y-3">\
+                                \{visibleDays.map((day, offset) => \{\
+                                    const idx = startIndex + offset;\
+                                    const avgSurfacePressure = data.hourly?.surface_pressure ? data.hourly.surface_pressure.reduce((a, b) => a + b, 0) / data.hourly.surface_pressure.length : 1000;\
+                                    const avgPressureMSL = avgSurfacePressure + PRESSURE_OFFSET;\
+                                    const windMax = data.daily.wind_speed_10m_max ? data.daily.wind_speed_10m_max[idx] : 15;\
+                                    const d = new Date(day); d.setHours(12);\
+                                    const dayMoon = calculateMoonPhase(d);\
+                                    const isToday = day === todayDateStr;\
+                                    const trendOverride = isToday ? pressureChangeVal : 0;\
+                                    return <ForecastCard key=\{day\} day=\{day\} code=\{data.daily.weather_code[idx]\} max=\{data.daily.temperature_2m_max[idx]\} min=\{data.daily.temperature_2m_min[idx]\} moon=\{dayMoon\} pressure=\{avgPressureMSL\} wind=\{windMax\} species=\{targetSpecies\} trendOverride=\{trendOverride\} darkMode=\{darkMode\} />;\
+                                \})\}\
+                            </div>\
+                        </section>\
+\
+                        <section className=\{`rounded-xl p-4 text-sm mb-8 flex gap-3 border $\{darkMode ? 'bg-blue-950/30 text-blue-300 border-blue-900/50' : 'bg-blue-50 text-blue-900 border-blue-100'\}`\}><Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" /><p><strong>Pro Tip:</strong> Select your target species to get customized scoring and AI lure recommendations tailored to that fish's biology.</p></section>\
+                    </main>\
+                </div>\
+            );\
+        \}\
+\
+        const root = createRoot(document.getElementById('root'));\
+        root.render(<App />);\
+    </script>\
+</body>\
+</html>}
